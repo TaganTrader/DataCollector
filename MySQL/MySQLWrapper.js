@@ -33,16 +33,16 @@ class MySQLWrapper {
         if (queries.length > 0) {
             let query = queries.shift();
             if (queries.length == 0) {
-                this.db.query(query).then(rows => {
+                this.query(query).then(rows => {
                     callback();
                 });
             } else {
-                this.db.query(query).then(rows => {
+                this.query(query).then(rows => {
                     this.executeQueries(queries, callback);
                 });
             }
         } else {
-            return 0;
+            return true;
         }
     }
 
