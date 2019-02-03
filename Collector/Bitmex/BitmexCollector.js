@@ -4,7 +4,7 @@ const _ = require('lodash');
 const fs = require('fs');
 const Collector = require('../Collector');
 const RestConnection = require('./RestConnection');
-
+const dedent = require('dedent');
 const DB = require('../../MySQL/MySQLWrapper');
 
 const default_config = {
@@ -31,7 +31,7 @@ class BitmexCollector extends Collector {
             sec: "",
         });
 
-        this.collect();
+        //this.collect();
     }
 
     candlesQuery (params) {
@@ -58,7 +58,7 @@ class BitmexCollector extends Collector {
     addCandlesToDB (candles) {
         if (!candles || candles.length == 0) return;
 
-        let summarySql = `
+        let summarySql = dedent`
             INSERT INTO ${this.config.tablename}
             (timestamp, open, close, low, high, volume, trades, updated_at, month, year)
             VALUES
@@ -84,54 +84,10 @@ class BitmexCollector extends Collector {
         //fs.mkdirSync(`./~Data/${this.config.tablename}/`, { recursive: true });
     }
 
-    executeQueries (queries) {
-        if (queries.length > 0) {
-            let query = queries.shift();
-            if (queries.length == 0) {
-                return this.db.query(query);
-            } else {
-                this.db.query(query).then(rows => {
-                    this.executeQueries(queries);
-                });
-            }
-        } else {
-            return 0;
-        }
-    }
 
-    preInitTable() {
-        let startTimestamp = new Date(this.config.data_from).getTime() / 1000;
-        let nowTimestamp = Math.floor(new Date().getTime() / 1000 / 60) * 60;
-
-        let queries = [];
-        
-        let summarySql = `
-            INSERT INTO ${this.config.tablename}
-            (timestamp, open, close, low, high, volume, trades, updated_at, month, year)
-            VALUES
-            `  
-        let template = summarySql;    
-            
-        for (let i = startTimestamp; i <= nowTimestamp; i += 60) {
-            let timestamp = i;
-            let month = new Date(timestamp * 1000).getMonth() + 1;
-            let year = new Date(timestamp * 1000).getFullYear();
-
-            let sql = '(?, ?, ?, ?, ?, ?, ?, ?, ?, ?),';
-            let values = 
-                [timestamp, 0, 0, 0, 0, 0, 0, 0, month, year];
-            template += this.db.mysql.format(sql, values);
-
-            if (i % (1000 * 60) == 0 && i !== startTimestamp) {
-                template = template.substr(0, template.length - 1);
-                queries.push(template);
-                template = summarySql;
-            }
-        }
     
-        return this.executeQueries(queries);
-    }
 
+    /*
     selectAllData() {
         let startTime = new Date().getTime();
         this.db.query("select * from ?? where `timestamp` > ?", [this.config.tablename, new Date().getTime() / 1000 - 100000 * 60]).then(rows => {
@@ -140,6 +96,7 @@ class BitmexCollector extends Collector {
         })
         return 0
     }
+    */
 
     collect () {
         this.db.query("use ??;", [env_config.database.schema])
