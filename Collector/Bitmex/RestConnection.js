@@ -32,10 +32,11 @@ class RestConnection {
             callback(new Error('Many error #858274'));
             return;
         }
+        
     
         request(options, function(error, response, body) {
-            var result;
-    
+            var result;            
+
             // Forbidden
             if ((response && response.statusCode == 403) || (error && error.message == 403)) {
                 self.banned++;
@@ -87,7 +88,7 @@ class RestConnection {
         });
     };
 
-    make_public_request (method, params, verb, callback) {            
+    make_public_request (method, params, verb, callback) {
         let formData = {};
         for (let key in params) {
             formData[key] = params[key];
@@ -96,11 +97,16 @@ class RestConnection {
         let postBody = JSON.stringify(formData);
         let expires = new Date().getTime() + (60 * 1000);
         let path = '/api/v1/' + method;
+
+        let signature = crypto.createHmac('sha256', this.sec).update(verb + path + expires + postBody).digest('hex');
     
         let headers = {
             'content-type' : 'application/json',
             'Accept': 'application/json',
             'X-Requested-With': 'XMLHttpRequest',
+            'api-expires': expires,
+            'api-key': this.key,
+            'api-signature': signature
         };
     
         let requestOptions = {

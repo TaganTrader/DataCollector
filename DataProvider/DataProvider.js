@@ -4,52 +4,87 @@
 const https = require('https');
 const fs = require('fs');
 const ws = require('ws');
+const _ = require('lodash');
 
+const Processing = require('./Processing');
 
 
 const default_config = {
-    port: 8000
+    port: 8443
 }
 
 class DataProvider extends ws.Server {
 
-    constructor (config) {
-        this.config = _.extend({}, default_config, config);
-        this.hosted = false;
+    constructor (config) {        
+        config = _.extend({}, default_config, config);
+        
 
-        if (!this.config.key_pm || !this.config.key_pm) {
+        if (!config.key_pm || !config.key_pm) {
             throw new Error("Can't find key or cert file for https");            
         }
 
-        const options = {
-            key:  fs.readFileSync(this.config.key_pm),
-            cert: fs.readFileSync(this.config.cert_pm)
-        };
+        const options = {            
+            key:  fs.readFileSync(config.key_pm),
+            cert: fs.readFileSync(config.cert_pm)
+        };        
 
-        this.server = https.createServer(options, (req, res) => {
-            //res.writeHead(200);
-            //res.end(index);
+        let server = https.createServer(options, (req, res) => {            
+            this.processing.do("webserver", req, res);
         });        
 
         //server.addListener('upgrade', (req, res, head) => console.log('UPGRADE:', req.url));
-        this.server.on('error', (err) => console.error(err));
-        this.server.listen(this.config.port, () => {
+        server.on('error', (err) => console.error(err));
+        server.listen(config.port, () => {
             this.hosted = true;
         });
                         
         super ({
-            server: this.server,
+            server: server,
             path: '/'            
         });
 
         this.on ('connection', (ws) => {
             this.acceptClient(ws);
         });
+
+        this.server = server;
+        this.hosted = false;
+
+        this.processing = new Processing();
+        
+        this.client_id = new Date().getTime();        
     }
 
-    acceptClient (ws) {
-        ws.send('Hello');   
-        ws.on ('message', (data) => ws.send('Receive: ' + data) );
+    acceptClient (ws) {        
+       
+        //ws.send('{Hello}');        
+        
+        ws.on ('message', (data) => {
+            
+            try {
+                data = JSON.parse(data);
+            } catch (e) {
+                console.error(e);                
+            }
+                        
+            if (data.method)
+            {            
+                if (typeof app.dataProvider.processing[data.method] === "function")
+                    app.dataProvider.processing[data.method].apply(ws, [data.qid, data.params]);
+                else
+                    app.dataProvider.processing.unrecognized.apply(ws, data);
+            }
+            else
+                app.dataProvider.processing.unrecognized.apply(ws, data);
+        });
+    }
+
+    broadcast (msg) {
+        this.clients.forEach(client => {
+            if (client.readyState === ws.OPEN) {
+                client.send(JSON.stringify(msg));
+            }
+        });      
     }
 }
 

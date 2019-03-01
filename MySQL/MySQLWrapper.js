@@ -17,6 +17,18 @@ class MySQLWrapper {
             if (error) throw error;
             this.connected = true;            
         });
+
+        this.mysql.on("error", error => {
+            this.connected = false;
+            console.log('MYSQL WRAPPER ERROR:')
+            console.log(error);
+            setTimeout(() => {
+                this.mysql.connect((error) => {
+                    if (error) throw error;
+                    this.connected = true;            
+                });
+            }, 1000);
+        })
     }
 
     query (sql, args) {
@@ -34,20 +46,22 @@ class MySQLWrapper {
             let query = queries.shift();
             if (queries.length == 0) {
                 this.query(query).then(rows => {
-                    callback();
+                    callback(); 
                 });
             } else {
                 this.query(query).then(rows => {
-                    this.executeQueries(queries, callback);
+                    this._executeQueries(queries, callback);
                 });
             }
         } else {
-            return true;
+            callback();            
         }
     }
-
+ 
     executeQueries (queries) {
         return new Promise((resolve, reject) => {
+            if (queries.length == 0)
+                resolve();
             this._executeQueries(queries, () => {
                 resolve();
             });

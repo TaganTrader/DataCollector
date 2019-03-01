@@ -3,11 +3,15 @@
 const DB = require('../MySQL/MySQLWrapper');
 const fs = require('fs');
 const dedent = require('dedent');
+const EventEmitter = require("events").EventEmitter;
 
-class DataBaseInit {
+class DataBaseInit extends EventEmitter {
     constructor (config) {
+        super();
         this.config = config;
         this.db = new DB(config);
+        
+        let tablename = 'xbtusd_1';
 
         this.db.query("SHOW SCHEMAS")
             .then(schemas => {
@@ -15,20 +19,21 @@ class DataBaseInit {
                 
                 if (!exist) {
                     return this.createSchema(config.schema);
-                }
-
+                }                
                 return;
             })
-            .then(() => {
-                return this.initTable()
+            .then(() => this.db.query(`use ${config.schema}`))
+            .then(() => this.db.query("select max(`timestamp`) as mx, min (`timestamp`) as mn from ??", [tablename]))
+            .then((rows) => {                
+                return this.initTable(tablename, rows[0].mx)                
             })
             .then(() => {                
+                this.emit('inited');            
                 return this.db.close();
             })
             .catch(error => {
                 console.error(error);
             });
-        
     }
 
     checkShema(schemas, schema) {
@@ -46,15 +51,15 @@ class DataBaseInit {
         return this.db.query(sql);
     }
 
-    initTable() {
-        let startTimestamp = new Date(this.config.data_from).getTime() / 1000;
+    initTable(tablename, maxTimeframe) {
+        let startTimestamp = maxTimeframe === null ? new Date(this.config.data_from).getTime() / 1000 : maxTimeframe + 60;
         let nowTimestamp = Math.floor(new Date().getTime() / 1000 / 60) * 60;
 
-        let queries = [`use ${this.config.schema};`];
+        let queries = []; //`use ${this.config.schema};`
         
         let summarySql = dedent`
-            INSERT INTO ${this.config.tablename}
-            (timestamp, open, close, low, high, volume, trades, updated_at, month, year)
+            INSERT INTO ${tablename}
+            (timestamp, open, close, low, high, volume, trades, month, year)
             VALUES
             `  
         let template = summarySql;    
@@ -64,9 +69,9 @@ class DataBaseInit {
             let month = new Date(timestamp * 1000).getMonth() + 1;
             let year = new Date(timestamp * 1000).getFullYear();
 
-            let sql = '(?, ?, ?, ?, ?, ?, ?, ?, ?, ?),';
+            let sql = '(?, ?, ?, ?, ?, ?, ?, ?, ?),';
             let values = 
-                [timestamp, 0, 0, 0, 0, 0, 0, 0, month, year];
+                [timestamp, 0, 0, 0, 0, 0, 0, month, year];
             template += this.db.mysql.format(sql, values);
 
             if (i % (1000 * 60) == 0 && i !== startTimestamp) {
@@ -75,7 +80,12 @@ class DataBaseInit {
                 template = summarySql;
             }
         }
-    
+
+        if (template !== summarySql) {
+            template = template.substr(0, template.length - 1);
+            queries.push(template);
+        }
+
         return this.db.executeQueries(queries);
     }
 }
